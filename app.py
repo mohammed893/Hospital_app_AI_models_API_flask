@@ -1,4 +1,4 @@
-from flask import Flask, request, jsonify
+from flask import Flask, request, jsonify, render_template
 import numpy as np
 import pickle
 import tensorflow as tf
@@ -74,6 +74,20 @@ def make_prediction(img_path, model, last_conv_layer_name="Top_Conv_Layer", cam_
 #----> BACKEND FUNCTIONALITY <----#
 heart_Disease_Model = pickle.load(open('The_Medical_Model1.pkl', 'rb')) #-> Loading model 1
 BrainTumor_Model = load_model("my_model.h5")
+
+
+@app.route("/", methods=['GET', 'POST'])
+def main():
+    return render_template("index.html")
+
+@app.route("/submit", methods=['GET', 'POST'])
+def get_photo():
+    if request.method == 'POST':
+        img = request.files['my_image']
+        img_path = os.path.join("static/images", img.filename)
+        img.save(img_path)
+        return render_template("index.html")
+
 # Medical model prediction route
 @app.route("/Heart-predict", methods=["POST"])
 def predict():
@@ -94,13 +108,13 @@ def predict():
     thal = int(req_data['thal'])
 
     makeprediction = heart_Disease_Model.predict([[age, sex, cp, trestbps,
-                                             chol, fbs, restecg,
-                                             thalach, exang, oldpeak,
-                                             slope, ca, thal]])
+                                                chol, fbs, restecg,
+                                                thalach, exang, oldpeak,
+                                                slope, ca, thal]])
     makeprediction_prob = heart_Disease_Model.predict_proba([[age, sex, cp, trestbps,
-                                                       chol, fbs, restecg,
-                                                       thalach, exang, oldpeak,
-                                                       slope, ca, thal]])
+                                                            chol, fbs, restecg,
+                                                            thalach, exang, oldpeak,
+                                                            slope, ca, thal]])
 
     output = makeprediction.tolist()
     output_2 = makeprediction_prob.tolist()

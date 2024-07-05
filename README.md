@@ -5,3 +5,5 @@ to install the packages
 2-run                                                          "set FLASK_APP=app.py"
 
 3-now to open the project run                                  "flask run"ssss
+
+IMPOERTANT don't forget to put the model files ok?

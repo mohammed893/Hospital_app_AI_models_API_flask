@@ -81,7 +81,7 @@ def main():
     return render_template("index.html")
 
 @app.route("/submit", methods=['GET', 'POST'])
-def get_photo():
+def get_image():
     if request.method == 'POST':
         img = request.files['my_image']
         img_path = os.path.join("static/images", img.filename)

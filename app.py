@@ -15,12 +15,12 @@ client = MongoClient("mongodb+srv://omarsaad08:5RCr7kLbTk1cwiUE@cluster0.lubh9dn
 db = client['tumora']
 collection = db['brains']
 
-
 # Path to save uploaded images
 UPLOAD_FOLDER = 'static/images'
 
 # Ensure the upload folder exists
 os.makedirs(UPLOAD_FOLDER, exist_ok=True)
+
 
 
 #-----> AI FUNCTIONALITY (TEAM) PLEASE DON'T TOUCH THAT <-----#

@@ -4,23 +4,25 @@ import pickle
 import tensorflow as tf
 import matplotlib as mpl
 import os
+from PIL import Image
 from pymongo import MongoClient
-from bson.objectid import ObjectId
+import io
+import cv2
+from bson.binary import Binary
 
 app = Flask(__name__)
 
 # Configure the MongoDB client
-client = MongoClient("mongodb://localhost:27017/")
-db = client['image_database']
-collection = db['images']
-
+client = MongoClient("mongodb+srv://omarsaad08:5RCr7kLbTk1cwiUE@cluster0.lubh9dn.mongodb.net/tumora?retryWrites=true&w=majority&appName=Cluster0")
+db = client['tumora']
+collection = db['brains']
 
 # Path to save uploaded images
 UPLOAD_FOLDER = 'static/images'
-app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
 
 # Ensure the upload folder exists
 os.makedirs(UPLOAD_FOLDER, exist_ok=True)
+
 
 
 #-----> AI FUNCTIONALITY (TEAM) PLEASE DON'T TOUCH THAT <-----#
@@ -96,24 +98,6 @@ BrainTumor_Model = load_model("my_model.h5")
 @app.route("/", methods=['GET', 'POST'])
 def main():
     return render_template("index.html")
-
-#@app.route("/submit", methods=['GET', 'POST'])
-#def get_image():
-    #if request.method == 'POST':
-
-        #img = request.files['my_image']
-
-        #if img.filename == '':
-            #return jsonify({"error": "No selected file"}), 400
-    
-        #img_path = os.path.join(app.config['UPLOAD_FOLDER'], img.filename)
-        #img.save(img_path)
-
-        # Save the file path in MongoDB
-        #result = #collection.insert_one({"image_path" : img_path})
-        #image_id = str(result.inserted_id)
-
-       # return jsonify({"image_id" : image_id})
 
 # Medical model prediction route
 @app.route("/Heart-predict", methods=["POST"])

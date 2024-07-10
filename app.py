@@ -4,20 +4,20 @@ import pickle
 import tensorflow as tf
 import matplotlib as mpl
 import os
+from PIL import Image
 from pymongo import MongoClient
-from bson.objectid import ObjectId
+import io
 
 app = Flask(__name__)
 
 # Configure the MongoDB client
-client = MongoClient("mongodb://localhost:27017/")
-db = client['image_database']
-collection = db['images']
+client = MongoClient("mongodb+srv://omarsaad08:5RCr7kLbTk1cwiUE@cluster0.lubh9dn.mongodb.net/tumora?retryWrites=true&w=majority&appName=Cluster0")
+db = client['tumora']
+collection = db['brains']
 
 
 # Path to save uploaded images
 UPLOAD_FOLDER = 'static/images'
-app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
 
 # Ensure the upload folder exists
 os.makedirs(UPLOAD_FOLDER, exist_ok=True)
@@ -97,23 +97,6 @@ BrainTumor_Model = load_model("my_model.h5")
 def main():
     return render_template("index.html")
 
-#@app.route("/submit", methods=['GET', 'POST'])
-#def get_image():
-    #if request.method == 'POST':
-
-        #img = request.files['my_image']
-
-        #if img.filename == '':
-            #return jsonify({"error": "No selected file"}), 400
-    
-        #img_path = os.path.join(app.config['UPLOAD_FOLDER'], img.filename)
-        #img.save(img_path)
-
-        # Save the file path in MongoDB
-        #result = #collection.insert_one({"image_path" : img_path})
-        #image_id = str(result.inserted_id)
-
-       # return jsonify({"image_id" : image_id})
 
 # Medical model prediction route
 @app.route("/Heart-predict", methods=["POST"])
@@ -161,6 +144,46 @@ def get_output():
         img.save(img_path)
         cam_path, prediction_1 = make_prediction(img_path, BrainTumor_Model)
         return {"prediction": prediction_1, "image_path": img_path, "segmented_image_path": cam_path}
+
+
+
+@app.route("/Alzheimer", methods=['POST'])
+def get_output():
+    request_data = request.get_json()
+    patient_id = request_data.get('id')
+    ray_date = request_data.get('imageDate')
+
+    #Find the patient   
+    patient_Document = collection.find_one({'id' : patient_id})
+
+    if not patient_Document:
+        return jsonify({"error": "Patient not found"}), 404
+    
+    # Extract the image data from the rays
+    ray_image_data = None
+    for ray in patient_Document['rays']:
+        if ray.get('imageDate') == ray_date:
+            ray_image_data = ray['imageData']
+            ray_image_name = ray['imageName']
+            break
+
+    if not ray_image_data:
+        return jsonify({"error": "Ray image data not found"}), 404
+
+    #creating the file_path in which the photo will be saved
+    file_path = os.path.join(UPLOAD_FOLDER, ray_image_name + '.png')
+    
+    # Convert the binary data to an image
+    image = Image.open(io.BytesIO(ray_image_data))
+
+    #saving the image in the file_path
+    image.save(file_path, format='PNG')
+
+    #predicting, Note: still needs modifying
+    prediction = make_prediction(file_path, BrainTumor_Model)
+    
+    return jsonify({"prediction": prediction})
+
 
 if __name__ == "__main__":
     app.run(debug=True)

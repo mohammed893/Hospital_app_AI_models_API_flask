@@ -97,23 +97,23 @@ BrainTumor_Model = load_model("my_model.h5")
 def main():
     return render_template("index.html")
 
-@app.route("/submit", methods=['GET', 'POST'])
-def get_image():
-    if request.method == 'POST':
+#@app.route("/submit", methods=['GET', 'POST'])
+#def get_image():
+    #if request.method == 'POST':
 
-        img = request.files['my_image']
+        #img = request.files['my_image']
 
-        if img.filename == '':
-            return jsonify({"error": "No selected file"}), 400
+        #if img.filename == '':
+            #return jsonify({"error": "No selected file"}), 400
     
-        img_path = os.path.join(app.config['UPLOAD_FOLDER'], img.filename)
-        img.save(img_path)
+        #img_path = os.path.join(app.config['UPLOAD_FOLDER'], img.filename)
+        #img.save(img_path)
 
         # Save the file path in MongoDB
-        result = collection.insert_one({"image_path" : img_path})
-        image_id = str(result.inserted_id)
+        #result = #collection.insert_one({"image_path" : img_path})
+        #image_id = str(result.inserted_id)
 
-        return jsonify({"image_id" : image_id})
+       # return jsonify({"image_id" : image_id})
 
 # Medical model prediction route
 @app.route("/Heart-predict", methods=["POST"])

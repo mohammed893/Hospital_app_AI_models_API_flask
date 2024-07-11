@@ -26,8 +26,6 @@ MODELS_FOLDER = 'models/'
 # Ensure the upload folder exists
 os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 
-
-
 #-----> AI FUNCTIONALITY (TEAM) PLEASE DON'T TOUCH THAT <-----#
 
 def load_model(model_path):
@@ -116,6 +114,7 @@ def predict_single_image_with_generator(model, image_path, img_size=(200, 200)):
 #-----> AI FUNCTIONALITY PLEASE DON'T *TOUCH* THAT <-----#
 
 #----> BACKEND FUNCTIONALITY <----#
+
 heart_Disease_Model = pickle.load(open(MODELS_FOLDER + 'The_Medical_Model1.pkl', 'rb')) #-> Loading model 1
 BrainTumor_Model = load_model(MODELS_FOLDER + "my_model.h5") #-> Loading model 2
 LungDiseaseModel = load_model(MODELS_FOLDER + "LungDiseaseCNN-2.15.0 (4).h5") #-> Loading model 3
@@ -164,16 +163,48 @@ def predict():
         "Yes_probability": output_2[0][1]
     })
 
-
 @app.route("/BrainTumor", methods=['POST'])
 def get_output():
-    if request.method == 'POST' and 'my_image' in request.files:
-        img = request.files['my_image']
-        img_path = os.path.join("static/images", img.filename)
-        img.save(img_path)
-        cam_path, prediction_1 = make_prediction(img_path, BrainTumor_Model)
-        return {"prediction": prediction_1, "image_path": img_path, "segmented_image_path": cam_path}
+    request_data = request.get_json()
+    patient_id = request_data.get('id')
+    ray_date = request_data.get('imageDate')
 
+    patient_document = collection.find_one({'id': patient_id})
+
+    if not patient_document:
+        return jsonify({"error": "Patient not found"}), 404
+    
+    ray_image_data = None
+    for ray in patient_document['rays']:
+        if ray.get('imageDate') == ray_date:
+            ray_image_data = ray['imageData']
+            ray_image_name = ray['imageName']
+            break
+
+    if not ray_image_data:
+        return jsonify({"error": "Ray image data not found"}), 404
+
+    
+    img_path = os.path.join(UPLOAD_FOLDER, ray_image_name + '.png')
+    
+    image = Image.open(io.BytesIO(ray_image_data))
+
+    image.save(img_path, format='PNG')
+
+    cam_path, prediction_1 = make_prediction(img_path, BrainTumor_Model)
+    segmented_image = Image.open(cam_path)
+    # Convert to binary data 
+    buffer = io.BytesIO()
+    segmented_image.save(buffer, format='JPEG')  
+    binary_data = buffer.getvalue()
+    segmented_imagename = f"segmentation_{ray_image_name}"
+    # Store in Mongo
+    collection.update_one(
+    {'id': patient_id, 'rays.imageDate': ray_date},
+    {'$set': {'segmentation': {'imageData': binary_data, 'imageDate': ray_date, 'imageName': segmented_imagename, 'result': prediction_1}}}
+    )
+
+    return jsonify({"result": prediction_1, "image_path": img_path, "segmented_image_path": cam_path}) 
 
 
 @app.route("/Alzheimer", methods=['POST'])

@@ -21,6 +21,7 @@ collection = db['brains']
 
 # Path to save uploaded images
 UPLOAD_FOLDER = 'static/images'
+MODELS_FOLDER = 'models/'
 
 # Ensure the upload folder exists
 os.makedirs(UPLOAD_FOLDER, exist_ok=True)
@@ -119,9 +120,9 @@ def load_model(model_path): #the old file contains this already
 #-----> AI FUNCTIONALITY PLEASE DON'T *TOUCH* THAT <-----#
 
 #----> BACKEND FUNCTIONALITY <----#
-heart_Disease_Model = pickle.load(open('The_Medical_Model1.pkl', 'rb')) #-> Loading model 1
-BrainTumor_Model = load_model("my_model.h5")
-LungDiseaseModel = load_model("D:\care code\Lung_Disease\LungDiseaseCNN-2.15.0 (4).h5")
+heart_Disease_Model = pickle.load(open(MODELS_FOLDER + 'The_Medical_Model1.pkl', 'rb')) #-> Loading model 1
+BrainTumor_Model = load_model(MODELS_FOLDER + "my_model.h5") #-> Loading model 2
+LungDiseaseModel = load_model(MODELS_FOLDER + "LungDiseaseCNN-2.15.0 (4).h5") #-> Loading model 3
 
 
 @app.route("/", methods=['GET', 'POST'])

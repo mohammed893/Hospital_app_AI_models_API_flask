@@ -7,6 +7,10 @@ import os
 from PIL import Image
 from pymongo import MongoClient
 import io
+import pandas
+from keras.preprocessing import image
+from keras.preprocessing.image import ImageDataGenerator, load_img, img_to_array
+
 
 app = Flask(__name__)
 
@@ -24,6 +28,7 @@ os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 
 
 #-----> AI FUNCTIONALITY (TEAM) PLEASE DON'T TOUCH THAT <-----#
+
 def load_model(model_path):
     print("Loading Saved Model")
     model = tf.keras.models.load_model(model_path)
@@ -83,14 +88,40 @@ def make_prediction(img_path, model, last_conv_layer_name="Top_Conv_Layer", cam_
     save_and_display_gradcam(img_path, heatmap, cam_path=cam_path)
     return [cam_path, decode_predictions(preds)]
 # Loading the Medical Model
+
+
+
+# ---------------------------------------------------------- LungDisease Functionality -----------------------------------------------
+
+def preprocess_image_with_generator(image_path, datagen, img_size=(200, 200)):
+    img = image.load_img(image_path, target_size=img_size)
+    img_array = image.img_to_array(img)
+    img_array = np.expand_dims(img_array, axis=0)  # Expand dimensions to create batch of size 1
+    img_array = datagen.standardize(img_array)  # Apply data generator preprocessing (e.g., normalization)
+    
+    return img_array
+
+def predict_single_image_with_generator(model, image_path, img_size=(200, 200)):
+    datagen = ImageDataGenerator(rescale=1./255)
+    classes = ['Lung Opacity', 'Normal', 'Viral Pneumonia']
+    processed_image = preprocess_image_with_generator(image_path, datagen, img_size)
+    prediction = model.predict(processed_image)
+    predicted_class_index = np.argmax(prediction, axis=-1)[0]  # Get the class index
+    predicted_class = classes[predicted_class_index]
+    return predicted_class 
+
+def load_model(model_path): #the old file contains this already
+    print("Loading Saved Model")
+    model = tf.keras.models.load_model(model_path)
+    return model 
+
+# ---------------------------------------------------------- LungDisease Functionality ------------------------------------------------------
 #-----> AI FUNCTIONALITY PLEASE DON'T *TOUCH* THAT <-----#
-
-
-
 
 #----> BACKEND FUNCTIONALITY <----#
 heart_Disease_Model = pickle.load(open('The_Medical_Model1.pkl', 'rb')) #-> Loading model 1
 BrainTumor_Model = load_model("my_model.h5")
+LungDiseaseModel = load_model("D:\care code\Lung_Disease\LungDiseaseCNN-2.15.0 (4).h5")
 
 
 @app.route("/", methods=['GET', 'POST'])
@@ -135,6 +166,7 @@ def predict():
         "No_probability": output_2[0][0],
         "Yes_probability": output_2[0][1]
     })
+
 
 @app.route("/BrainTumor", methods=['POST'])
 def get_output():
@@ -182,6 +214,43 @@ def get_output():
     #predicting, Note: still needs modifying
     prediction = make_prediction(file_path, BrainTumor_Model)
     
+    return jsonify({"prediction": prediction})
+
+
+
+@app.route("/LungDisease", methods=['POST'])
+def predict():
+    request_data = request.get_json()
+    patient_id = request_data.get('id')
+    ray_date = request_data.get('imageDate')
+
+    #Find the patient   
+    patient_Document = collection.find_one({'id' : patient_id})
+
+    if patient_id not in patient_Document:
+        return jsonify({"error": "Patient not found"})
+    
+    # Extract the image data from the rays
+    ray_image_data = None
+    for ray in patient_Document['rays']:
+        if ray.get('imageDate') == ray_date:
+            ray_image_data = ray['imageData']
+            ray_image_name = ray['imageName']
+            break
+
+    if not ray_image_data:
+        return jsonify({"error": "Ray image data not found"})
+
+    #creating the file_path in which the photo will be saved
+    file_path = os.path.join(UPLOAD_FOLDER, ray_image_name + '.png')
+    
+    # Convert the binary data to an image
+    image = Image.open(io.BytesIO(ray_image_data))
+
+    #saving the image in the file_path
+    image.save(file_path, format='PNG')
+
+    prediction = predict_single_image_with_generator(LungDiseaseModel, "D:\Cmdr\Hospital_app_AI_models_API_flask\static\images\lung_image.jpg")
     return jsonify({"prediction": prediction})
 
 

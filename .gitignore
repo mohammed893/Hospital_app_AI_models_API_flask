@@ -1,3 +1,4 @@
 env/
 *.log
 my_model.h5
+models

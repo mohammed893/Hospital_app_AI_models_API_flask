@@ -111,10 +111,6 @@ def predict_single_image_with_generator(model, image_path, img_size=(200, 200)):
     predicted_class = classes[predicted_class_index]
     return predicted_class 
 
-def load_model(model_path): #the old file contains this already
-    print("Loading Saved Model")
-    model = tf.keras.models.load_model(model_path)
-    return model 
 
 # ---------------------------------------------------------- LungDisease Functionality ------------------------------------------------------
 #-----> AI FUNCTIONALITY PLEASE DON'T *TOUCH* THAT <-----#
@@ -251,7 +247,7 @@ def predict():
     #saving the image in the file_path
     image.save(file_path, format='PNG')
 
-    prediction = predict_single_image_with_generator(LungDiseaseModel, "D:\Cmdr\Hospital_app_AI_models_API_flask\static\images\lung_image.jpg")
+    prediction = predict_single_image_with_generator(LungDiseaseModel, file_path)
     return jsonify({"prediction": prediction})
 
 

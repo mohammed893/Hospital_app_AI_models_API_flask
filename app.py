@@ -17,7 +17,8 @@ app = Flask(__name__)
 # Configure the MongoDB client
 client = MongoClient("mongodb+srv://omarsaad08:5RCr7kLbTk1cwiUE@cluster0.lubh9dn.mongodb.net/tumora?retryWrites=true&w=majority&appName=Cluster0")
 db = client['tumora']
-collection = db['brains']
+braincollection = db['brains']
+lungcollection = db['lungs']
 
 # Path to save uploaded images
 UPLOAD_FOLDER = 'static/images'
@@ -169,7 +170,7 @@ def get_output():
     patient_id = request_data.get('id')
     ray_date = request_data.get('imageDate')
 
-    patient_document = collection.find_one({'id': patient_id})
+    patient_document = braincollection.find_one({'id': patient_id})
 
     if not patient_document:
         return jsonify({"error": "Patient not found"}), 404
@@ -199,7 +200,7 @@ def get_output():
     binary_data = buffer.getvalue()
     segmented_imagename = f"segmentation_{ray_image_name}"
     # Store in Mongo
-    collection.update_one(
+    braincollection.update_one(
     {'id': patient_id, 'rays.imageDate': ray_date},
     {'$set': {'segmentation': {'imageData': binary_data, 'imageDate': ray_date, 'imageName': segmented_imagename, 'result': prediction_1}}}
     )
@@ -253,7 +254,7 @@ def predict():
     ray_date = request_data.get('imageDate')
 
     #Find the patient   
-    patient_Document = collection.find_one({'id' : patient_id})
+    patient_Document = lungcollection.find_one({'id' : patient_id})
 
     if patient_id not in patient_Document:
         return jsonify({"error": "Patient not found"})
@@ -279,6 +280,10 @@ def predict():
     image.save(file_path, format='PNG')
 
     prediction = predict_single_image_with_generator(LungDiseaseModel, file_path)
+    lungcollection.update_one(
+        {"id": patient_id, 'rays.imageDate': ray_date},
+        {'$set': {'rays.$.result': prediction}}
+    )
     return jsonify({"prediction": prediction})
 
 

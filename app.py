@@ -19,6 +19,7 @@ client = MongoClient("mongodb+srv://omarsaad08:5RCr7kLbTk1cwiUE@cluster0.lubh9dn
 db = client['tumora']
 braincollection = db['brains']
 lungcollection = db['lungs']
+alzheimercollection = db['alzheimer'] #it hasn't been made yet
 
 # Path to save uploaded images
 UPLOAD_FOLDER = 'static/images'
@@ -112,6 +113,51 @@ def predict_single_image_with_generator(model, image_path, img_size=(200, 200)):
 
 
 # ---------------------------------------------------------- LungDisease Functionality ------------------------------------------------------
+
+# ---------------------------------------------------------- Alzheimers Functionality -----------------------------------------------
+def create_gens(train_df, valid_df, test_df, batch_size):
+
+    img_size = (224, 224)
+    channels = 3 # either BGR or Grayscale
+    color = 'rgb'
+    img_shape = (img_size[0], img_size[1], channels)
+
+    ts_length = len(test_df)
+    test_batch_size = max(sorted([ts_length // n for n in range(1, ts_length + 1) if ts_length % n == 0 and ts_length / n <= 80]))
+    test_steps = ts_length // test_batch_size
+
+    def scalar(img):
+        return img
+
+    tr_gen = ImageDataGenerator(preprocessing_function=scalar, horizontal_flip=True)
+    ts_gen = ImageDataGenerator(preprocessing_function=scalar)
+
+    train_gen = tr_gen.flow_from_dataframe(train_df, x_col='filepaths', y_col='labels', target_size=img_size, class_mode='categorical',
+                                        color_mode=color, shuffle=True, batch_size=batch_size)
+
+    valid_gen = ts_gen.flow_from_dataframe(valid_df, x_col='filepaths', y_col='labels', target_size=img_size, class_mode='categorical',
+                                        color_mode=color, shuffle=True, batch_size=batch_size)
+
+    # Note: we will use custom test_batch_size, and make shuffle= false
+    test_gen = ts_gen.flow_from_dataframe(test_df, x_col='filepaths', y_col='labels', target_size=img_size, class_mode='categorical',
+                                        color_mode=color, shuffle=False, batch_size=test_batch_size)
+
+    return train_gen, valid_gen, test_gen
+
+def predict_with_generator(model, img_path, batch_size=1):
+    classes = ["Mild Demanted" , "Moderate Demanted" , "Non demanted" ," Very mild demanted"]
+    img_df = pandas.DataFrame({'filepaths': [img_path], 'labels': [None]})
+    img_size = (224, 224)
+    ts_gen = ImageDataGenerator(preprocessing_function=lambda x: x)
+    img_gen = ts_gen.flow_from_dataframe(img_df, x_col='filepaths', y_col=None, target_size=img_size,
+                                        class_mode=None, color_mode='rgb', shuffle=False, batch_size=batch_size)
+    prediction = model.predict(img_gen, steps=np.ceil(1 / batch_size))
+    
+    predicted_class = np.argmax(prediction, axis=1)
+    
+    return prediction, classes[predicted_class[0]]
+# ---------------------------------------------------------- Alzheimers Functionality ------------------------------------------------------
+
 #-----> AI FUNCTIONALITY PLEASE DON'T *TOUCH* THAT <-----#
 
 #----> BACKEND FUNCTIONALITY <----#
@@ -119,7 +165,7 @@ def predict_single_image_with_generator(model, image_path, img_size=(200, 200)):
 heart_Disease_Model = pickle.load(open(MODELS_FOLDER + 'The_Medical_Model1.pkl', 'rb')) #-> Loading model 1
 BrainTumor_Model = load_model(MODELS_FOLDER + "my_model.h5") #-> Loading model 2
 LungDiseaseModel = load_model(MODELS_FOLDER + "LungDiseaseCNN-2.15.0 (4).h5") #-> Loading model 3
-
+AlzheimerModel = load_model(MODELS_FOLDER + "BrainAlzahymers.h5") #-> Loding model 4
 
 @app.route("/", methods=['GET', 'POST'])
 def main():
@@ -128,7 +174,7 @@ def main():
 
 # Medical model prediction route
 @app.route("/Heart-predict", methods=["POST"])
-def predict():
+def predictHeartDisease():
     req_data = request.get_json()
 
     age = int(req_data['age'])
@@ -165,16 +211,18 @@ def predict():
     })
 
 @app.route("/BrainTumor", methods=['POST'])
-def get_output():
+def predictBrainTumor():
     request_data = request.get_json()
     patient_id = request_data.get('id')
     ray_date = request_data.get('imageDate')
 
+    #Find the patient 
     patient_document = braincollection.find_one({'id': patient_id})
 
     if not patient_document:
         return jsonify({"error": "Patient not found"}), 404
     
+    # Extract the image data from the rays
     ray_image_data = None
     for ray in patient_document['rays']:
         if ray.get('imageDate') == ray_date:
@@ -185,20 +233,26 @@ def get_output():
     if not ray_image_data:
         return jsonify({"error": "Ray image data not found"}), 404
 
-    
+    #creating the file_path in which the photo will be saved
     img_path = os.path.join(UPLOAD_FOLDER, ray_image_name + '.png')
     
+    # Convert the binary data to an image
     image = Image.open(io.BytesIO(ray_image_data))
 
+    #saving the image in the file_path
     image.save(img_path, format='PNG')
 
+    #predicting
     cam_path, prediction_1 = make_prediction(img_path, BrainTumor_Model)
     segmented_image = Image.open(cam_path)
+
     # Convert to binary data 
     buffer = io.BytesIO()
     segmented_image.save(buffer, format='JPEG')  
     binary_data = buffer.getvalue()
+
     segmented_imagename = f"segmentation_{ray_image_name}"
+
     # Store in Mongo
     braincollection.update_one(
     {'id': patient_id, 'rays.imageDate': ray_date},
@@ -209,13 +263,13 @@ def get_output():
 
 
 @app.route("/Alzheimer", methods=['POST'])
-def get_output():
+def predictAlzheimer():
     request_data = request.get_json()
     patient_id = request_data.get('id')
     ray_date = request_data.get('imageDate')
 
     #Find the patient   
-    patient_Document = collection.find_one({'id' : patient_id})
+    patient_Document = alzheimercollection.find_one({'id' : patient_id})
 
     if not patient_Document:
         return jsonify({"error": "Patient not found"}), 404
@@ -240,15 +294,22 @@ def get_output():
     #saving the image in the file_path
     image.save(file_path, format='PNG')
 
-    #predicting, Note: still needs modifying
-    prediction = make_prediction(file_path, BrainTumor_Model)
+    #predicting
+    prediction, predected_class = make_prediction(AlzheimerModel, file_path)
+
+
+    #store in mongo (the collection hasnt been made yet)
+    # alzheimercollection.update_one(
+    #     {"id": patient_id, 'rays.imageDate': ray_date},
+    #     {'$set': {'rays.$.result': prediction}}
+    # )
     
-    return jsonify({"prediction": prediction})
+    return jsonify({"prediction": prediction, "predicted_class": predected_class})
 
 
 
 @app.route("/LungDisease", methods=['POST'])
-def predict():
+def predictLungDisease():
     request_data = request.get_json()
     patient_id = request_data.get('id')
     ray_date = request_data.get('imageDate')

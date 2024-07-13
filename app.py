@@ -8,6 +8,7 @@ from PIL import Image
 from pymongo import MongoClient
 import io
 import pandas
+import base64
 from keras.preprocessing import image
 from keras.preprocessing.image import ImageDataGenerator, load_img, img_to_array
 
@@ -19,7 +20,7 @@ client = MongoClient("mongodb+srv://omarsaad08:5RCr7kLbTk1cwiUE@cluster0.lubh9dn
 db = client['tumora']
 braincollection = db['brains']
 lungcollection = db['lungs']
-alzheimercollection = db['alzheimer'] #it hasn't been made yet
+alzheimercollection = db['zahaimers'] 
 
 # Path to save uploaded images
 UPLOAD_FOLDER = 'static/images'
@@ -212,140 +213,212 @@ def predictHeartDisease():
 
 @app.route("/BrainTumor", methods=['POST'])
 def predictBrainTumor():
-    request_data = request.get_json()
-    patient_id = request_data.get('id')
-    ray_date = request_data.get('imageDate')
+    direct = False
+    data = request.get_json()
+    direct = data.get('direct')
 
-    #Find the patient 
-    patient_document = braincollection.find_one({'id': patient_id})
+    #getting the image from mongodb
+    if direct == False:
+        request_data = request.get_json()
+        patient_id = request_data.get('id')
+        ray_date = request_data.get('imageDate')
 
-    if not patient_document:
-        return jsonify({"error": "Patient not found"}), 404
+        #Find the patient 
+        patient_document = braincollection.find_one({'id': patient_id})
+
+        if not patient_document:
+            return jsonify({"error": "Patient not found"}), 404
+        
+        # Extract the image data from the rays
+        ray_image_data = None
+        for ray in patient_document['rays']:
+            if ray.get('imageDate') == ray_date:
+                ray_image_data = ray['imageData']
+                ray_image_name = ray['imageName']
+                break
+
+        if not ray_image_data:
+            return jsonify({"error": "Ray image data not found"}), 404
+
+        #creating the file_path in which the photo will be saved
+        img_path = os.path.join(UPLOAD_FOLDER, ray_image_name + '.png')
+        
+        # Convert the binary data to an image
+        image = Image.open(io.BytesIO(ray_image_data))
+
+        #saving the image in the file_path
+        image.save(img_path, format='PNG')
+
+        #predicting
+        cam_path, prediction = make_prediction(img_path, BrainTumor_Model)
+        segmented_image = Image.open(cam_path)
+
+        # Convert to binary data 
+        buffer = io.BytesIO()
+        segmented_image.save(buffer, format='JPEG')  
+        binary_data = buffer.getvalue()
+
+        segmented_imagename = f"segmentation_{ray_image_name}"
+
+        # Store in Mongo
+        braincollection.update_one(
+        {'id': patient_id, 'rays.imageDate': ray_date},
+        {'$set': {'segmentation': {'imageData': binary_data, 'imageDate': ray_date, 'imageName': segmented_imagename, 'result': prediction}}}
+        )
+
+        return jsonify({"result": prediction, "image_path": img_path, "segmented_image_path": cam_path}) 
     
-    # Extract the image data from the rays
-    ray_image_data = None
-    for ray in patient_document['rays']:
-        if ray.get('imageDate') == ray_date:
-            ray_image_data = ray['imageData']
-            ray_image_name = ray['imageName']
-            break
+    #getting the image from request
+    else:
+        image = request.files('my_image')
 
-    if not ray_image_data:
-        return jsonify({"error": "Ray image data not found"}), 404
+        #create the image path
+        image_path = os.path.join(UPLOAD_FOLDER, image.filename)
 
-    #creating the file_path in which the photo will be saved
-    img_path = os.path.join(UPLOAD_FOLDER, ray_image_name + '.png')
-    
-    # Convert the binary data to an image
-    image = Image.open(io.BytesIO(ray_image_data))
+        #saving the image in the file_path
+        image.save(image_path, format='PNG')
 
-    #saving the image in the file_path
-    image.save(img_path, format='PNG')
+        #predicting
+        cam_path, prediction = make_prediction(image_path, BrainTumor_Model)
 
-    #predicting
-    cam_path, prediction_1 = make_prediction(img_path, BrainTumor_Model)
-    segmented_image = Image.open(cam_path)
+        with open(cam_path, "rb") as segmented_image_file:
+        # Encode the binary data to Base64
+            encoded_segmented_image = base64.b64encode(segmented_image_file.read()).decode('utf-8')
 
-    # Convert to binary data 
-    buffer = io.BytesIO()
-    segmented_image.save(buffer, format='JPEG')  
-    binary_data = buffer.getvalue()
+        return jsonify({"result": prediction, "segmented_image": encoded_segmented_image}) 
 
-    segmented_imagename = f"segmentation_{ray_image_name}"
-
-    # Store in Mongo
-    braincollection.update_one(
-    {'id': patient_id, 'rays.imageDate': ray_date},
-    {'$set': {'segmentation': {'imageData': binary_data, 'imageDate': ray_date, 'imageName': segmented_imagename, 'result': prediction_1}}}
-    )
-
-    return jsonify({"result": prediction_1, "image_path": img_path, "segmented_image_path": cam_path}) 
 
 
 @app.route("/Alzheimer", methods=['POST'])
 def predictAlzheimer():
-    request_data = request.get_json()
-    patient_id = request_data.get('id')
-    ray_date = request_data.get('imageDate')
+    direct = False
+    data = request.get_json()
+    direct = data.get('direct')
 
-    #Find the patient   
-    patient_Document = alzheimercollection.find_one({'id' : patient_id})
+    #getting the image from mongodb
+    if direct == False:
 
-    if not patient_Document:
-        return jsonify({"error": "Patient not found"}), 404
+        request_data = request.get_json()
+        patient_id = request_data.get('id')
+        ray_date = request_data.get('imageDate')
+
+        #Find the patient   
+        patient_Document = alzheimercollection.find_one({'id' : patient_id})
+
+        if not patient_Document:
+            return jsonify({"error": "Patient not found"}), 404
+        
+        # Extract the image data from the rays
+        ray_image_data = None
+        for ray in patient_Document['rays']:
+            if ray.get('imageDate') == ray_date:
+                ray_image_data = ray['imageData']
+                ray_image_name = ray['imageName']
+                break
+
+        if not ray_image_data:
+            return jsonify({"error": "Ray image data not found"}), 404
+
+        #creating the file_path in which the photo will be saved
+        file_path = os.path.join(UPLOAD_FOLDER, ray_image_name + '.png')
+        
+        # Convert the binary data to an image
+        image = Image.open(io.BytesIO(ray_image_data))
+
+        #saving the image in the file_path
+        image.save(file_path, format='PNG')
+
+        #predicting
+        prediction, predicted_class = predict_with_generator(AlzheimerModel, file_path)
+
+
+        # store in mongo
+        alzheimercollection.update_one(
+            {"id": patient_id, 'rays.imageDate': ray_date},
+            {'$set': {'rays.$.result': prediction}}
+        )
+        
+        return jsonify({"prediction": prediction, "predicted_class": predicted_class})
     
-    # Extract the image data from the rays
-    ray_image_data = None
-    for ray in patient_Document['rays']:
-        if ray.get('imageDate') == ray_date:
-            ray_image_data = ray['imageData']
-            ray_image_name = ray['imageName']
-            break
+    #getting the image from request
+    else:
+        image = request.files('my_image')
 
-    if not ray_image_data:
-        return jsonify({"error": "Ray image data not found"}), 404
+        #create the image path
+        image_path = os.path.join(UPLOAD_FOLDER, image.filename)
 
-    #creating the file_path in which the photo will be saved
-    file_path = os.path.join(UPLOAD_FOLDER, ray_image_name + '.png')
-    
-    # Convert the binary data to an image
-    image = Image.open(io.BytesIO(ray_image_data))
+        #saving the image in the file_path
+        image.save(image_path, format='PNG')
 
-    #saving the image in the file_path
-    image.save(file_path, format='PNG')
+        #predicting
+        prediction, predicted_class = predict_with_generator(AlzheimerModel, image_path)
 
-    #predicting
-    prediction, predected_class = make_prediction(AlzheimerModel, file_path)
+        return jsonify({"result": prediction, "predicted_class": predicted_class}) 
 
-
-    #store in mongo (the collection hasnt been made yet)
-    # alzheimercollection.update_one(
-    #     {"id": patient_id, 'rays.imageDate': ray_date},
-    #     {'$set': {'rays.$.result': prediction}}
-    # )
-    
-    return jsonify({"prediction": prediction, "predicted_class": predected_class})
 
 
 
 @app.route("/LungDisease", methods=['POST'])
 def predictLungDisease():
-    request_data = request.get_json()
-    patient_id = request_data.get('id')
-    ray_date = request_data.get('imageDate')
+    direct = False
+    data = request.get_json()
+    direct = data.get('direct')
 
-    #Find the patient   
-    patient_Document = lungcollection.find_one({'id' : patient_id})
+    #getting the image from mongodb
+    if direct == False:
 
-    if patient_id not in patient_Document:
-        return jsonify({"error": "Patient not found"})
+        request_data = request.get_json()
+        patient_id = request_data.get('id')
+        ray_date = request_data.get('imageDate')
+
+        #Find the patient   
+        patient_Document = lungcollection.find_one({'id' : patient_id})
+
+        if patient_id not in patient_Document:
+            return jsonify({"error": "Patient not found"})
+        
+        # Extract the image data from the rays
+        ray_image_data = None
+        for ray in patient_Document['rays']:
+            if ray.get('imageDate') == ray_date:
+                ray_image_data = ray['imageData']
+                ray_image_name = ray['imageName']
+                break
+
+        if not ray_image_data:
+            return jsonify({"error": "Ray image data not found"})
+
+        #creating the file_path in which the photo will be saved
+        file_path = os.path.join(UPLOAD_FOLDER, ray_image_name + '.png')
+        
+        # Convert the binary data to an image
+        image = Image.open(io.BytesIO(ray_image_data))
+
+        #saving the image in the file_path
+        image.save(file_path, format='PNG')
+
+        prediction = predict_single_image_with_generator(LungDiseaseModel, file_path)
+        lungcollection.update_one(
+            {"id": patient_id, 'rays.imageDate': ray_date},
+            {'$set': {'rays.$.result': prediction}}
+        )
+        return jsonify({"prediction": prediction})
     
-    # Extract the image data from the rays
-    ray_image_data = None
-    for ray in patient_Document['rays']:
-        if ray.get('imageDate') == ray_date:
-            ray_image_data = ray['imageData']
-            ray_image_name = ray['imageName']
-            break
+    #getting the image from request
+    else:
+        image = request.files('my_image')
 
-    if not ray_image_data:
-        return jsonify({"error": "Ray image data not found"})
+        #create the image path
+        image_path = os.path.join(UPLOAD_FOLDER, image.filename)
 
-    #creating the file_path in which the photo will be saved
-    file_path = os.path.join(UPLOAD_FOLDER, ray_image_name + '.png')
-    
-    # Convert the binary data to an image
-    image = Image.open(io.BytesIO(ray_image_data))
+        #saving the image in the file_path
+        image.save(image_path, format='PNG')
 
-    #saving the image in the file_path
-    image.save(file_path, format='PNG')
+        #predicting
+        prediction = predict_single_image_with_generator(LungDiseaseModel, image_path)
 
-    prediction = predict_single_image_with_generator(LungDiseaseModel, file_path)
-    lungcollection.update_one(
-        {"id": patient_id, 'rays.imageDate': ray_date},
-        {'$set': {'rays.$.result': prediction}}
-    )
-    return jsonify({"prediction": prediction})
+        return jsonify({"result": prediction}) 
+
 
 
 if __name__ == "__main__":
